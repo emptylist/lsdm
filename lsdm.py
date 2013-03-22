@@ -8,15 +8,28 @@ from scipy.spatial.distance import squareform
 
 ## TODO: CML file access to data
 
-def gaussianKernel(x,y):
-    return (-1*exp(abs(x-y))/2)
+## Currently this is functioning as a function library
 
-def constructDistanceMatrix(dataArray, eps):
+## The slowest part of this flow is constructing the
+## Probability Kernel.  Perhaps preprocessing the data
+## to reduce the calls will help.  Or writing the
+## metric function in C.
+
+def gaussianKernel(x,y):
+    v = x - y
+    return exp(-1*(np.dot(v,v))/2)
+
+def constructProbabilityKernel(dataArray, eps):
     return squareform((1/eps) * pdist(dataArray, gaussianKernel)) 
 
-def constructMarkovMatrix(distanceMatrix):
-    pass
+def normalizeProbabilityKernel(probabilityKernel):
+    P = np.apply_along_axis(np.sum, 1, probabilityKernel)
+    return probabilityKernel / np.sqrt(np.outer(P,P))
 
-## TODO: eigenvalue/eigenvector computation
+def constructMarkovMatrix(npKernel):
+    return np.apply_along_axis(lambda v: v/sum(v), 1, npKernel)
 
+def diffusionMap(markovMatrix):
+    return np.eig(markovMatrix)
 
+## TODO: Output the data in the embedded manifold
