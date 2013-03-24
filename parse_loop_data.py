@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 
 ## MIT License
-## (C) James Crooks, 2013
+## (C) 2013 James Crooks
 
-## Short script to parse loop data from the tcl script dump
-## into a more managable form.  From the commandline this
-## script dumps the parsed form to the data to be collected
-## or operated on by Unix tools.
-## This script is intended only for use in the TCR project.
+'''Short script to parse loop data from the tcl script dump
+into a more managable form.  From the commandline this
+script dumps the parsed form to the data to be collected
+or operated on by Unix tools.
+This script is intended only for use in the TCR project.'''
 
 import sys
 import numpy as np
@@ -30,6 +30,7 @@ def parse_data(filename):
 
 if __name__ == "__main__":
     try:
+        # This is probably not going to work the way I want...
         print parse_data(sys.argv[1])
     
     except:

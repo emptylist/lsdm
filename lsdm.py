@@ -8,10 +8,10 @@ from scipy.spatial.distance import squareform
 
 ## TODO: CML file access to data
 
-## Currently this is acting as a function library
+'''Currently this is acting as a function library.
 
-## Furthermore this only implements Diffusion Maps,
-## *NOT* Locally Scaled DMs at this time.
+Furthermore this only implements Diffusion Maps,
+*NOT* Locally Scaled DMs at this time.'''
 
 def constructProbabilityKernel(dataArray, eps):
     '''Generates a distance/probability matrix from the gaussian
@@ -41,4 +41,5 @@ def diffusionMap(markovMatrix):
     ## TODO: Return embedding instead.
     return np.eig(markovMatrix)
 
-
+if __name__ == "__main__":
+    print "TODO: Add commandline functionality!"
