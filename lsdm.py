@@ -19,7 +19,7 @@ def constructProbabilityKernel(dataArray, eps):
     not represent actual probabilities.  This is the major bottleneck
     in the performance thus far.  Using kd-trees from either the 
     scikit-ann or scikit-learn packages should help this.'''
-    return squareform((1/(2*eps)) * pdist(dataArray, 'sqeuclidean')) 
+    return squareform(exp(-1*((1/(2*eps)) * pdist(dataArray, 'sqeuclidean'))))
 
 def normalizeProbabilityKernel(probabilityKernel):
     '''Normalizing the prob matrix is equivalent to 
@@ -40,6 +40,13 @@ def diffusionMap(markovMatrix):
     and object with the embedded data instead.'''
     ## TODO: Return embedding instead.
     return np.eig(markovMatrix)
+
+def fullDiffusionMaps(dataArray, eps):
+    K = exp(-1*squareform((1/(2*eps) * pdist(dataArray, 'sqeuclidean'))))
+    P = np.apply_along_axis(np.sum, 1, K)
+    Kbar = K / np.sqrt(np.outer(P,P))
+    M = np.apply_along_axis(lambda v: v/sum(v), 1, Kbar)
+    return np.eig(M)
 
 if __name__ == "__main__":
     print "TODO: Add commandline functionality!"
