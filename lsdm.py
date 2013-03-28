@@ -7,7 +7,7 @@ from scipy import exp
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
 
-from sklearn.base import BaseEstimator, TransformerMixins
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.manifold.spectral_embedding import spectral_embedding, SpectralEmbedding
 
 ## TODO: CML file access to data
@@ -15,7 +15,7 @@ from sklearn.manifold.spectral_embedding import spectral_embedding, SpectralEmbe
 ## Note to self: The Markov Matrix *IS* the normalized graph Laplacian
 ## under the diffusion distance kernel.  Hence it suffices to build the
 ## diffusion affinity matrix and simply pass that to scikit-learn's
-## Spectral Embedding.
+## Spectral Embedding class or spectral_embedding function.
 
 ## Design question: Do I build a DiffusionMap object modeled on the
 ## SpectralEmbedding object in scikit-learn, or write functions that
@@ -24,10 +24,26 @@ from sklearn.manifold.spectral_embedding import spectral_embedding, SpectralEmbe
 ## more consistent interface, but the second prevents some unnecessary
 ## code replication (with essentially copy&paste style).
 
+## ISSUE: It's currently not clear what the best interface is for integrating
+## locally-scaled and fixed neighborhood diffusion maps into a single class
+
 '''Currently this is acting as a function library.
 
 Furthermore this only implements Diffusion Maps,
-*NOT* Locally Scaled DMs at this time.'''
+*NOT* Locally Scaled DMs at this time.
+
+    References
+    _________
+
+    - Determination of reaction coordinates via locally scaled diffusion map, 2011
+      Mary A. Rohrdanz, et al.
+      http://dx.doi.org/10.1063/1.3569857
+
+    - Diffusion Maps, Spectral Clustering and Eigenfunctions of Fokker-Planck Operators, 2005
+      Boaz Nadler, et al.
+      **Add ref location**
+
+'''
 
 def _local_scale_determination(dataArray):
     pass
@@ -40,27 +56,35 @@ def _constructProbabilityKernel(dataArray, eps):
     scikit-ann or scikit-learn packages should help this.'''
     return squareform(exp(-1*((1/(2*eps)) * pdist(dataArray, 'sqeuclidean'))))
 
-def fitDiffusionMap(dataArray, eps, n_components=2):
-    X = _constructProbabilityKernel(dataArray, eps)
-    return SpectralEmbedding(n_components, affinity="precomputed").fit(X)
-
-def fit_transformDiffusionMap(dataArray, eps, n_components=2):
-    X = _constructProbabilityKernel(dataArray, eps)
-    return SpectralEmbedding(n_components, affinity="precomputed").fit(X)
-
-class DiffusionMap(BaseEstimator, TransformerMixins):
+class DiffusionMap(BaseEstimator, TransformerMixin):
     '''Diffusion Map object styled on (and using code from) the scikit-learn
-    SpectralEmbedding object. Unfinished.'''
+    SpectralEmbedding object. '''
     
-    def __init__(self, n_components=2, affinity="precomputed",
-                 gamma=None, random_state=None, eigen_solver=None,
-                 n_neighbors=None):
+    def __init__(self, n_components=2, local_scaling=False, eigen_solver=None):
         self.n_components = n_components
-        self.affinity = affinity
-        self.gamma = gamma
-        self.random_state = random_state
+        self.local_scaling = local_scaling
         self.eigen_solver = eigen_solver
-        self.n_neighbors = n_neighbors
+
+    def _get_affinity_matrix(self, X):
+        affinity_matrix = _constructProbabilityKernel(X)
+        if self.local_scaling:
+            print "Local scaling is not implemented yet. Reverting to standard diffusion maps."
+        return affinity_matrix
+
+
+    def fit(self, X):
+        """Fit the model from data in X."""
+        self.affinity_matrix_ = self._get_affinity_matrix(X)
+        self.embedding_ = spectral_embedding(affinity_matrix,
+                                             n_components=self.n_components,
+                                             eigen_solver=self.eigen_solver)
+        return self
+    
+    def fit_transform(self, X):
+        """Fit the model from data in X and transform X."""
+
+        self.fit(X)
+        return self.embedding_
         
 
 
