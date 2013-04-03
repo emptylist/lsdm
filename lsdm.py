@@ -4,6 +4,7 @@ import numpy as np
 import numpy.linalg as la
 
 import scipy.sparse
+from scipt.sparse.linalg import eigsh
 from scipy import exp
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
@@ -80,9 +81,9 @@ class DiffusionMap(BaseEstimator, TransformerMixin):
     def fit(self, X):
         """Fit the model from data in X."""
         self.affinity_matrix_ = self._get_affinity_matrix(X)
-        self.embedding_ = spectral_embedding(self.affinity_matrix_,
-                                             n_components=self.n_components,
-                                             eigen_solver=self.eigen_solver)
+        lambdas, embedding = eigsh(self.affinity_matrix_,
+                                   k = self.n_components + 1)
+        self.embedding_ = embedding[:self.n_components]
         return self
     
     def fit_transform(self, X):
@@ -91,7 +92,5 @@ class DiffusionMap(BaseEstimator, TransformerMixin):
         self.fit(X)
         return self.embedding_
         
-
-
 if __name__ == "__main__":
     print "TODO: Add commandline functionality!"
