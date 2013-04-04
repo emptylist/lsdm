@@ -22,6 +22,10 @@ from sklearn.manifold.spectral_embedding import spectral_embedding, SpectralEmbe
 ## spectral_embedding and the sparse LU solver is still slow.  Best idea seems to be to
 ## write a separate embedding process and use scipy.sparse.eigsh
 
+## Memory Issue!! : 40K data matrix causes a segfault during generation of the distance matrix.
+## Clearly the distance matrix needs to be initialized as a sparse matrix, preferably preallocated.
+## It is time to begin looking at using a kd-tree or ann.
+
 
 '''Currently this is acting as a function library.
 
@@ -45,11 +49,8 @@ def _local_scale_determination(dataArray):
     pass
 
 def _constructProbabilityKernel(dataArray, eps):
-    '''Generates a distance/probability matrix from the gaussian
-    kernel.  The probability matrix is not normalized, and does
-    not represent actual probabilities.  This is the major bottleneck
-    in the performance thus far.  Using kd-trees from either the 
-    scikit-ann or scikit-learn packages should help this.'''
+    '''Constructs the Markov matrix from a data array and scale parameter.'''
+    # TODO: This function should be broken up so local scaling can be performed as well.
     K = exp((-1/(2*eps)) * squareform(pdist(dataArray, 'sqeuclidean')))
     threshold = 0.02*exp(-1/eps) ## To make the matrix sparse 
     K[K < threshold] = 0
