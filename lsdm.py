@@ -48,6 +48,10 @@ Furthermore this only implements Diffusion Maps,
 def _local_scale_determination(dataArray):
     pass
 
+def _constructDistanceMatrix(dataArray):
+    ## This should replace the pdist function in computing K in _constructProbabilityKernel
+    pass
+
 def _constructProbabilityKernel(dataArray, eps):
     '''Constructs the Markov matrix from a data array and scale parameter.'''
     # TODO: This function should be broken up so local scaling can be performed as well.
