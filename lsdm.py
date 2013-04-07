@@ -17,16 +17,6 @@ from sklearn.manifold.spectral_embedding import spectral_embedding, SpectralEmbe
 ## ISSUE: It's currently not clear what the best interface is for integrating
 ## locally-scaled and fixed neighborhood diffusion maps into a single class
 
-## SPEED TEST: cProfile shows that the sparse matrices solved large dot-product problem,
-## decreased the embedding time.  However, symmetric matrix errors are popping up from
-## spectral_embedding and the sparse LU solver is still slow.  Best idea seems to be to
-## write a separate embedding process and use scipy.sparse.eigsh
-
-## Memory Issue!! : 40K data matrix causes a segfault during generation of the distance matrix.
-## Clearly the distance matrix needs to be initialized as a sparse matrix, preferably preallocated.
-## It is time to begin looking at using a kd-tree or ann.
-
-
 '''Currently this is acting as a function library.
 
 Furthermore this only implements Diffusion Maps,
@@ -48,22 +38,29 @@ Furthermore this only implements Diffusion Maps,
 def _local_scale_determination(dataArray):
     pass
 
-def _constructDistanceMatrix(dataArray):
-    ## This should replace the pdist function in computing K in _constructProbabilityKernel
-    pass
+def _pairwiseDistanceFunc(v):
+    return lambda w: la.norm(v-w)
+
+def _pairwiseDistances(A,v):
+    return np.apply_along_axis(_pairwiseDistanceFunc(v), 1, A)
+
+def _sparseDistances(A,v,eps):
+    D = _pairwiseDistance(A,v)
+    threshold = exp(-1/(2*eps))
+    D[D < threshold] = 0
+    return scipy.sparse.coo_matrix(D)
+
+def _constructDistanceMatrix(dataArray,eps):
+    return scipy.sparse.vstack([_sparseDistances(dataArray,v,eps) for v in  A]).tocsr()
 
 def _constructProbabilityKernel(dataArray, eps):
     '''Constructs the Markov matrix from a data array and scale parameter.'''
     # TODO: This function should be broken up so local scaling can be performed as well.
-    K = exp((-1/(2*eps)) * squareform(pdist(dataArray, 'sqeuclidean')))
-    threshold = 0.02*exp(-1/eps) ## To make the matrix sparse 
-    K[K < threshold] = 0
+    K = _constructDistanceMatrix(dataArray, eps)
     P = np.apply_along_axis(np.sum, 1, K)
     Kbar = K / np.sqrt(np.outer(P,P))
     D = np.diag(np.sqrt(1./np.apply_along_axis(np.sum, 1, Kbar)))
-    Kbar_spar = scipy.sparse.csr_matrix(Kbar)
-    D_spar = scipy.sparse.dia_matrix(D)
-    return np.dot(np.dot(D_spar,Kbar_spar),D_spar)
+    return np.dot(np.dot(D,Kbar),D)
 
 class DiffusionMap(BaseEstimator, TransformerMixin):
     '''Diffusion Map object styled on (and using code from) the scikit-learn
