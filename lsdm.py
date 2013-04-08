@@ -4,7 +4,7 @@ import numpy as np
 import numpy.linalg as la
 
 import scipy.sparse
-from scipt.sparse.linalg import eigsh
+from scipy.sparse.linalg import eigsh
 from scipy import exp
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
@@ -41,7 +41,7 @@ def _local_scale_determination(dataArray):
 def _pairwiseDistanceFunc(v):
     return lambda w: la.norm(v-w)
 
-def _pairwiseDistances(A,v):
+def _pairwiseDistance(A,v):
     return np.apply_along_axis(_pairwiseDistanceFunc(v), 1, A)
 
 def _sparseDistances(A,v,eps):
@@ -51,15 +51,18 @@ def _sparseDistances(A,v,eps):
     return scipy.sparse.coo_matrix(D)
 
 def _constructDistanceMatrix(dataArray,eps):
-    return scipy.sparse.vstack([_sparseDistances(dataArray,v,eps) for v in  A]).tocsr()
+    return scipy.sparse.vstack([_sparseDistances(dataArray,v,eps) for v in  dataArray]).tocsr()
 
 def _constructProbabilityKernel(dataArray, eps):
     '''Constructs the Markov matrix from a data array and scale parameter.'''
     # TODO: This function should be broken up so local scaling can be performed as well.
     K = _constructDistanceMatrix(dataArray, eps)
-    P = np.apply_along_axis(np.sum, 1, K)
-    Kbar = K / np.sqrt(np.outer(P,P))
-    D = np.diag(np.sqrt(1./np.apply_along_axis(np.sum, 1, Kbar)))
+    P = scipy.sparse.csr_matrix(K.sum(1))
+    P = P*P.T
+    P.data[:] = np.sqrt(P.data[:])
+    Kbar = K.data[:] / P.data[:]
+    D = scipy.sparse.diag(np.sqrt(1./Kbar.sum(1)))
+#    D = np.diag(np.sqrt(1./np.apply_along_axis(np.sum, 1, Kbar)))
     return np.dot(np.dot(D,Kbar),D)
 
 class DiffusionMap(BaseEstimator, TransformerMixin):
