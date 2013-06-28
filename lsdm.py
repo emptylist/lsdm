@@ -9,8 +9,10 @@ from scipy import exp
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
 
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.manifold.spectral_embedding import spectral_embedding, SpectralEmbedding
+from numba.decorators import autojit
+
+#from sklearn.base import BaseEstimator, TransformerMixin
+#from sklearn.manifold.spectral_embedding import spectral_embedding, SpectralEmbedding
 
 ## TODO: CML file access to data
 
@@ -35,8 +37,9 @@ Furthermore this only implements Diffusion Maps,
 
 '''
 
-def _local_scale_determination(dataArray):
-    pass
+####
+#    Distance Functions
+####
 
 def _pairwiseDistanceFunc(v):
     return lambda w: la.norm(v-w)
@@ -44,11 +47,29 @@ def _pairwiseDistanceFunc(v):
 def _pairwiseDistance(A,v):
     return np.apply_along_axis(_pairwiseDistanceFunc(v), 1, A)
 
+@autojit
+def _numbaPairwiseDistance(A,v):
+    pass
+
 def _sparseDistances(A,v,eps):
     D = _pairwiseDistance(A,v)
     threshold = exp(-1/(2*eps))
     D[D < threshold] = 0
     return scipy.sparse.coo_matrix(D)
+
+####
+#    Local Scaling Functions
+####
+
+def _sortDistance(A,v):
+    return sorted(zip(A, _pairwiseDistance(A,v), key=lambda i: i[1])
+
+def _localScaleDetermination(dataArray):
+    pass
+
+####
+#    Diffusion Maps
+####
 
 def _constructDistanceMatrix(dataArray,eps):
     return scipy.sparse.vstack([_sparseDistances(dataArray,v,eps) for v in  dataArray]).tocsr()
@@ -56,18 +77,26 @@ def _constructDistanceMatrix(dataArray,eps):
 def _constructProbabilityKernel(dataArray, eps):
     '''Constructs the Markov matrix from a data array and scale parameter.'''
     # TODO: This function should be broken up so local scaling can be performed as well.
-    K = _constructDistanceMatrix(dataArray, eps)
-    P = scipy.sparse.csr_matrix(K.sum(1))
+    K = _constructDistanceMatrix(dataArray, eps).todense()
+    #P = scipy.sparse.csr_matrix(K.sum(1))
+    P = K.sum(1)
+    #print P.shape
     P = P*P.T
-    P.data[:] = np.sqrt(P.data[:])
-    Kbar = K.data[:] / P.data[:]
-    D = scipy.sparse.diag(np.sqrt(1./Kbar.sum(1)))
-#    D = np.diag(np.sqrt(1./np.apply_along_axis(np.sum, 1, Kbar)))
+    #print P.shape
+    P = 1./np.sqrt(P)
+    #print P.shape
+    Kbar = K * P
+    #print Kbar.shape
+    #print np.sqrt(1./Kbar.sum(1)).shape
+    D = np.diag(np.sqrt(1./Kbar.sum(1)).T)
+    #D = np.diag(np.sqrt(1./np.apply_along_axis(np.sum, 1, Kbar)))
+    #print D.shape
+    #print Kbar.shape
     return np.dot(np.dot(D,Kbar),D)
 
-class DiffusionMap(BaseEstimator, TransformerMixin):
-    '''Diffusion Map object styled on (and using code from) the scikit-learn
-    SpectralEmbedding object. '''
+class DiffusionMap():
+    '''Diffusion Map object styled on the scikit-learn SpectralEmbedding
+    object. '''
     
     def __init__(self, n_components=2, local_scaling=False, eigen_solver=None
                  , epsilon=0.1):
@@ -76,7 +105,7 @@ class DiffusionMap(BaseEstimator, TransformerMixin):
         self.eigen_solver = eigen_solver
         self.epsilon = epsilon
 
-    def _get_affinity_matrix(self, X):
+    def _getAffinityMatrix(self, X):
         affinity_matrix = _constructProbabilityKernel(X, self.epsilon)
         if self.local_scaling:
             print "Local scaling is not implemented yet. Reverting to standard diffusion maps."
@@ -85,7 +114,7 @@ class DiffusionMap(BaseEstimator, TransformerMixin):
 
     def fit(self, X):
         """Fit the model from data in X."""
-        self.affinity_matrix_ = self._get_affinity_matrix(X)
+        self.affinity_matrix_ = self._getAffinityMatrix(X)
         lambdas, embedding = eigsh(self.affinity_matrix_,
                                    k = self.n_components + 1)
         self.embedding_ = embedding[:self.n_components]

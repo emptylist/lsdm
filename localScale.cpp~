@@ -1,0 +1,10 @@
+#include <iostream>
+#include "localScale.h"
+
+//functions for computing the local scaling parameters
+
+bool compare(const DistVec& x, const DistVec& y)
+{
+  return x.dist < y.dist;
+}
+
