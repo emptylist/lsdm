@@ -29,9 +29,34 @@ double euclidean(const vector<double>& x, const vector<double>& y)
   return sqrt(sqdist);
 }
 
-DistArr dist_y_from_x(const vector<double>& x, const vector<double>& y)
+DistArr dist_y_from_x(vector<double>& x, const vector<double>& y)
 {
-  //return DistArr { dist: distance(x,y), arr: x& } ;
+  return DistArr { dist: euclidean(x,y), vec: x } ;
+}
+
+distData dist_from_x(const vector<double>& x, const dataArray& D)
+{
+  dataArray::size_type sz = dataArray.size();
+  distData ret;
+
+  for (dataArray::size_type i = 0; i < sz; ++i) {
+    distData.push_back(dist_y_from_x(x, D[i]));
+  }
+
+  return ret;
+}
+
+vector<double> calc_scaling_parameters(const dataArray& X)
+{
+  vector<double> scaling_parameters;
+  dataArray::size_type sz = X.size();
+  
+  for (dataArray::size_type i = 0; i < sz; ++i) {
+    scaling_parameters.push_back(calc_scaling_parameter(X[i], X));
+  }
+
+  return scaling_parameters;
+
 }
 
 int main() 
@@ -52,6 +77,12 @@ int main()
   double d = euclidean(x,y);
 
   cout << d << endl;
+
+  DistArr X = dist_y_from_x(x,y);
+  cout << X.dist << endl;
+
+  DistArr Y = dist_y_from_x(y,x);
+  cout << compare(Y,X) << endl;
 
   return 0;
 }
