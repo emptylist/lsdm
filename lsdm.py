@@ -3,6 +3,9 @@
 import numpy as np
 import numpy.linalg as la
 
+from concurrent import futures
+import multiprocessing
+
 import scipy.sparse
 from scipy.sparse.linalg import eigsh
 from scipy import exp
@@ -10,6 +13,8 @@ from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
 
 from numba.decorators import autojit
+
+from functools import partial
 
 #from sklearn.base import BaseEstimator, TransformerMixin
 #from sklearn.manifold.spectral_embedding import spectral_embedding, SpectralEmbedding
@@ -38,31 +43,47 @@ Furthermore this only implements Diffusion Maps,
 '''
 
 ####
-#    Distance Functions
+#    Low-level and Distance Functions
 ####
 
-def _pairwiseDistanceFunc(v):
-    return lambda w: la.norm(v-w)
-
-def _pairwiseDistance(A,v):
-    return np.apply_along_axis(_pairwiseDistanceFunc(v), 1, A)
+'''Some low-level building blocks.  Most of it can be done more
+generally using NumPy built-in functions, however, testing shows
+that Numba LLVM compilation speeds up these small operations around
+3-10x the NumPy versions.  As the distance function will be called
+hundreds of thousands of times, this is quite an improvement.'''
 
 @autojit
-def _numbaPairwiseDistance(A,v):
-    pass
+def _pairwiseRMSD(v,w):
+    n = len(v)
+    dist_sq = 0.0
+    for i in xrange(n):
+        dist_sq += (v[i] - w[i]) * (v[i] - w[i])
+    return np.sqrt(dist_sq / n)
+
+@autojit
+def _thresholdVector(v, eps):
+    for i in xrange(v.shape[0]):
+        if v[i] < eps:
+            v[i] = 0
+    return v
 
 def _sparseDistances(A,v,eps):
-    D = _pairwiseDistance(A,v)
+    # Testing shows apply_along_axis broadcasting is efficient
+    # for the LLVM compiled rmsd distance function
+    D = np.apply_along_axis(_pairwiseRMSD, 1, A, v)  ## Returns a vector
     threshold = exp(-1/(2*eps))
-    D[D < threshold] = 0
+    D = _thresholdVector(D, eps)
     return scipy.sparse.coo_matrix(D)
 
 ####
 #    Local Scaling Functions
 ####
-
+"""Local scaling is hard, it turns out. This section is largely incomplete.
+Scikit-learn's MDS routines seem inefficient.  Some Numba LLVM magic might be
+in order.
+"""
 def _sortDistance(A,v):
-    return sorted(zip(A, _pairwiseDistance(A,v), key=lambda i: i[1])
+    return sorted(zip(A, _pairwiseDistance(A,v), key=lambda i: i[1]))
 
 def _localScaleDetermination(dataArray):
     pass
@@ -72,7 +93,22 @@ def _localScaleDetermination(dataArray):
 ####
 
 def _constructDistanceMatrix(dataArray,eps):
-    return scipy.sparse.vstack([_sparseDistances(dataArray,v,eps) for v in  dataArray]).tocsr()
+    ## This is where we should do futures!
+    sparse_vectors = []
+    cpus = multiprocessing.cpu_count()
+
+    def distances(v):
+        return _sparseDistances(dataArray, v, eps)
+
+    #The futures don't work; it seems that either Numba compiled or NumPy
+    # functions don't play nice with the pickling process that is used
+    # to do the multiprocessing.
+    with futures.ThreadPoolExecutor(max_workers=cpus) as executor:
+        for svec in executor.map(distances, dataArray):
+            sparse_vectors.append(svec)
+    #sparse_vectors = [_sparseDistances(dataArray, v, eps) for v in dataArray]
+                                     
+    return scipy.sparse.vstack(sparse_vectors).tocsr()
 
 def _constructProbabilityKernel(dataArray, eps):
     '''Constructs the Markov matrix from a data array and scale parameter.'''
@@ -110,7 +146,6 @@ class DiffusionMap():
         if self.local_scaling:
             print "Local scaling is not implemented yet. Reverting to standard diffusion maps."
         return affinity_matrix
-
 
     def fit(self, X):
         """Fit the model from data in X."""
