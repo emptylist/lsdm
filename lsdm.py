@@ -3,14 +3,9 @@
 import numpy as np
 import numpy.linalg as la
 
-from concurrent import futures
-import multiprocessing
-
 import scipy.sparse
 from scipy.sparse.linalg import eigsh
 from scipy import exp
-from scipy.spatial.distance import pdist
-from scipy.spatial.distance import squareform
 
 from numba.decorators import autojit
 
@@ -67,20 +62,12 @@ def _thresholdVector(v, eps):
             v[i] = 0
     return v
 
-def _sparseDistances(A,v,eps):
-    # Testing shows apply_along_axis broadcasting is efficient
-    # for the LLVM compiled rmsd distance function
-    D = np.apply_along_axis(_pairwiseRMSD, 1, A, v)  ## Returns a vector
-    threshold = exp(-1/(2*eps))
-    D = _thresholdVector(D, eps)
-    return scipy.sparse.coo_matrix(D)
-
 ####
 #    Local Scaling Functions
 ####
 """Local scaling is hard, it turns out. This section is largely incomplete.
-Scikit-learn's MDS routines seem inefficient.  Some Numba LLVM magic might be
-in order.
+Scikit-learn's MDS routines seem inefficient (and we only really need SVDs anyway?)
+Some Numba LLVM magic might be in order.
 """
 def _sortDistance(A,v):
     return sorted(zip(A, _pairwiseDistance(A,v), key=lambda i: i[1]))
@@ -92,43 +79,19 @@ def _localScaleDetermination(dataArray):
 #    Diffusion Maps
 ####
 
-def _constructDistanceMatrix(dataArray,eps):
-    ## This is where we should do futures!
-    sparse_vectors = []
-    cpus = multiprocessing.cpu_count()
+def _constructDistanceMatrix(dataArray):
+    return np.apply_along_axis(lambda v: np.apply_along_axis(_pairwiseRMSD, 1, dataArray, v)
+                               , 0, dataArray)
 
-    def distances(v):
-        return _sparseDistances(dataArray, v, eps)
-
-    #The futures don't work; it seems that either Numba compiled or NumPy
-    # functions don't play nice with the pickling process that is used
-    # to do the multiprocessing.
-    with futures.ThreadPoolExecutor(max_workers=cpus) as executor:
-        for svec in executor.map(distances, dataArray):
-            sparse_vectors.append(svec)
-    #sparse_vectors = [_sparseDistances(dataArray, v, eps) for v in dataArray]
-                                     
-    return scipy.sparse.vstack(sparse_vectors).tocsr()
-
-def _constructProbabilityKernel(dataArray, eps):
-    '''Constructs the Markov matrix from a data array and scale parameter.'''
-    # TODO: This function should be broken up so local scaling can be performed as well.
-    K = _constructDistanceMatrix(dataArray, eps).todense()
-    #P = scipy.sparse.csr_matrix(K.sum(1))
-    P = K.sum(1)
-    #print P.shape
-    P = P*P.T
-    #print P.shape
+def _constructProbabilityKernel(dM):
+    '''Constructs Kbar from a scaled distance matrix array..'''
+    P = dM.sum(1)
+    P = dot(P,P.T)
     P = 1./np.sqrt(P)
-    #print P.shape
     Kbar = K * P
-    #print Kbar.shape
-    #print np.sqrt(1./Kbar.sum(1)).shape
-    D = np.diag(np.sqrt(1./Kbar.sum(1)).T)
-    #D = np.diag(np.sqrt(1./np.apply_along_axis(np.sum, 1, Kbar)))
-    #print D.shape
-    #print Kbar.shape
-    return np.dot(np.dot(D,Kbar),D)
+    return Kbar
+#    D = np.diag(np.sqrt(1./Kbar.sum(1)).T)
+#    return np.dot(np.dot(D,Kbar),D)
 
 class DiffusionMap():
     '''Diffusion Map object styled on the scikit-learn SpectralEmbedding
@@ -140,16 +103,26 @@ class DiffusionMap():
         self.local_scaling = local_scaling
         self.eigen_solver = eigen_solver
         self.epsilon = epsilon
+        
+    def _localScaling(self, dM):
+        self.local_scale, self.local_dimension = _localScaling(dM)
+        return self
 
-    def _getAffinityMatrix(self, X):
-        affinity_matrix = _constructProbabilityKernel(X, self.epsilon)
-        if self.local_scaling:
-            print "Local scaling is not implemented yet. Reverting to standard diffusion maps."
-        return affinity_matrix
+    def _affinityMatrix(self, dM):
+        if local_scaling:
+            scale_factors = 1./self.local_scale
+            dM = np.dot(scale_factors, scale_factors.T) * dM
+        else:
+            dM = (1./self.epsilon) * dM
+        Kbar = _constructProbabilityKernel(dM)
+        D = np.diag(np.sqrt(1./Kbar.sum(1)).T)
+        self.affinity_matrix = np.dot(np.dot(D,Kbar),D)
+        return self
 
     def fit(self, X):
         """Fit the model from data in X."""
-        self.affinity_matrix_ = self._getAffinityMatrix(X)
+        dM = _constructDistanceMatrix(X)
+        self._affinityMatrix(dM)
         lambdas, embedding = eigsh(self.affinity_matrix_,
                                    k = self.n_components + 1)
         self.embedding_ = embedding[:self.n_components]
