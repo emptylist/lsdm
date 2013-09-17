@@ -81,12 +81,13 @@ def _localScaleDetermination(dataArray):
 
 def _constructDistanceMatrix(dataArray):
     return np.apply_along_axis(lambda v: np.apply_along_axis(_pairwiseRMSD, 1, dataArray, v)
-                               , 0, dataArray)
+                               , 1, dataArray)
 
 def _constructProbabilityKernel(dM):
     '''Constructs Kbar from a scaled distance matrix array..'''
-    P = dM.sum(1)
-    P = dot(P,P.T)
+    K = exp(-1*dM)
+    P = K.sum(1)
+    P = np.outer(P,P)
     P = 1./np.sqrt(P)
     Kbar = K * P
     return Kbar
@@ -109,9 +110,9 @@ class DiffusionMap():
         return self
 
     def _affinityMatrix(self, dM):
-        if local_scaling:
+        if self.local_scaling:
             scale_factors = 1./self.local_scale
-            dM = np.dot(scale_factors, scale_factors.T) * dM
+            dM = np.outer(scale_factors, scale_factors) * dM
         else:
             dM = (1./self.epsilon) * dM
         Kbar = _constructProbabilityKernel(dM)
@@ -123,7 +124,7 @@ class DiffusionMap():
         """Fit the model from data in X."""
         dM = _constructDistanceMatrix(X)
         self._affinityMatrix(dM)
-        lambdas, embedding = eigsh(self.affinity_matrix_,
+        lambdas, embedding = eigsh(self.affinity_matrix,
                                    k = self.n_components + 1)
         self.embedding_ = embedding[:self.n_components]
         return self
